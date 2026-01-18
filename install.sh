@@ -72,11 +72,47 @@ if is_container; then
 fi
 
 # -----------------------------------------------------------------------------
+# Neovim Installation (from GitHub releases for latest version)
+# -----------------------------------------------------------------------------
+NVIM_MIN_VERSION="0.11.2"
+
+version_gte() {
+    # Returns 0 if $1 >= $2
+    printf '%s\n%s' "$2" "$1" | sort -V -C
+}
+
+install_neovim_from_release() {
+    local current_version=""
+    if command -v nvim &>/dev/null; then
+        current_version=$(nvim --version | head -1 | grep -oP 'v?\K[0-9]+\.[0-9]+\.[0-9]+')
+        if version_gte "$current_version" "$NVIM_MIN_VERSION"; then
+            success "neovim $current_version already installed (>= $NVIM_MIN_VERSION)"
+            return
+        fi
+        info "neovim $current_version found, but need >= $NVIM_MIN_VERSION"
+    fi
+
+    info "Installing neovim from GitHub releases..."
+    local tmp_dir=$(mktemp -d)
+    local nvim_url="https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz"
+
+    if curl -fsSL "$nvim_url" | tar -xz -C "$tmp_dir"; then
+        sudo rm -rf /opt/nvim
+        sudo mv "$tmp_dir/nvim-linux-x86_64" /opt/nvim
+        sudo ln -sf /opt/nvim/bin/nvim /usr/local/bin/nvim
+        rm -rf "$tmp_dir"
+        success "neovim installed from GitHub releases"
+    else
+        error "Failed to download neovim"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+}
+
+# -----------------------------------------------------------------------------
 # Package Installation
 # -----------------------------------------------------------------------------
 install_packages() {
-    local packages=("git" "tmux" "neovim")
-
     info "Checking dependencies..."
 
     case "$OS" in
@@ -85,7 +121,7 @@ install_packages() {
                 warn "Homebrew not found. Installing..."
                 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
             fi
-            for pkg in "${packages[@]}"; do
+            for pkg in git tmux neovim; do
                 if ! brew list "$pkg" &>/dev/null; then
                     info "Installing $pkg..."
                     brew install "$pkg"
@@ -95,7 +131,7 @@ install_packages() {
             done
             ;;
         debian)
-            local apt_packages=("git" "tmux" "neovim")
+            local apt_packages=("git" "tmux")
             local missing=()
             for pkg in "${apt_packages[@]}"; do
                 if ! dpkg -l "$pkg" &>/dev/null; then
@@ -109,6 +145,8 @@ install_packages() {
                 sudo apt-get update
                 sudo apt-get install -y "${missing[@]}"
             fi
+            # Install neovim from GitHub releases for latest version
+            install_neovim_from_release
             ;;
         fedora)
             local dnf_packages=("git" "tmux" "neovim")
