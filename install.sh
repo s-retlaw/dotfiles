@@ -27,18 +27,25 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; }
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COPY_MODE=false
 
+SKIP_PACKAGES=false
+
 usage() {
     echo "Usage: ./install.sh [OPTIONS]"
     echo ""
     echo "Options:"
-    echo "  --copy    Copy files instead of symlinking (useful for containers)"
-    echo "  --help    Show this help message"
+    echo "  --copy           Copy files instead of symlinking (useful for containers)"
+    echo "  --skip-packages  Skip package installation (useful when packages installed elsewhere)"
+    echo "  --help           Show this help message"
+    echo ""
+    echo "In containers, package installation is skipped by default."
+    echo "On regular systems (laptops, etc.), full installation is performed."
 }
 
 # Parse arguments
 for arg in "$@"; do
     case "$arg" in
         --copy) COPY_MODE=true ;;
+        --skip-packages) SKIP_PACKAGES=true ;;
         --help) usage; exit 0 ;;
     esac
 done
@@ -131,7 +138,7 @@ install_packages() {
             done
             ;;
         debian)
-            local apt_packages=("git" "tmux")
+            local apt_packages=("git" "tmux" "build-essential")
             local missing=()
             for pkg in "${apt_packages[@]}"; do
                 if ! dpkg -l "$pkg" &>/dev/null; then
@@ -257,7 +264,15 @@ main() {
     echo -e "${BLUE}========================================${NC}"
     echo ""
 
-    install_packages
+    # Skip packages in containers (setup.sh handles them) or if --skip-packages
+    if [[ "$SKIP_PACKAGES" == true ]]; then
+        info "Skipping package installation (--skip-packages)"
+    elif is_container; then
+        info "Container detected - skipping package installation"
+        info "(packages should be installed via devcontainer setup.sh)"
+    else
+        install_packages
+    fi
     echo ""
     install_dotfiles
 
