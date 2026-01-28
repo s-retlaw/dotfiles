@@ -36,9 +36,6 @@ usage() {
     echo "  --copy           Copy files instead of symlinking (useful for containers)"
     echo "  --skip-packages  Skip package installation (useful when packages installed elsewhere)"
     echo "  --help           Show this help message"
-    echo ""
-    echo "In containers, package installation is skipped by default."
-    echo "On regular systems (laptops, etc.), full installation is performed."
 }
 
 # Parse arguments
@@ -79,7 +76,7 @@ if is_container; then
 fi
 
 # -----------------------------------------------------------------------------
-# Neovim Installation (from GitHub releases for latest version)
+# GitHub Release Installers (for packages not in standard repos)
 # -----------------------------------------------------------------------------
 NVIM_MIN_VERSION="0.11.2"
 
@@ -116,6 +113,27 @@ install_neovim_from_release() {
     fi
 }
 
+install_duckdb_from_release() {
+    if command -v duckdb &>/dev/null; then
+        success "duckdb already installed ($(duckdb --version | head -1))"
+        return
+    fi
+
+    info "Installing duckdb from GitHub releases..."
+    local tmp_dir=$(mktemp -d)
+    local duckdb_url="https://github.com/duckdb/duckdb/releases/latest/download/duckdb_cli-linux-amd64.zip"
+
+    if curl -fsSL "$duckdb_url" -o "$tmp_dir/duckdb.zip" && unzip -q "$tmp_dir/duckdb.zip" -d "$tmp_dir"; then
+        sudo install -m 755 "$tmp_dir/duckdb" /usr/local/bin/duckdb
+        rm -rf "$tmp_dir"
+        success "duckdb installed from GitHub releases"
+    else
+        error "Failed to download duckdb"
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+}
+
 # -----------------------------------------------------------------------------
 # Package Installation
 # -----------------------------------------------------------------------------
@@ -128,7 +146,7 @@ install_packages() {
                 warn "Homebrew not found. Installing..."
                 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
             fi
-            for pkg in git tmux neovim; do
+            for pkg in git vim tmux neovim curl wget ripgrep fd fzf gh w3m bat duckdb; do
                 if ! brew list "$pkg" &>/dev/null; then
                     info "Installing $pkg..."
                     brew install "$pkg"
@@ -138,13 +156,13 @@ install_packages() {
             done
             ;;
         debian)
-            local apt_packages=("git" "tmux" "build-essential")
+            local apt_packages=("git" "vim" "tmux" "build-essential" "curl" "wget" "ripgrep" "fd-find" "fzf" "w3m" "bat" "unzip")
             local missing=()
             for pkg in "${apt_packages[@]}"; do
-                if ! dpkg -l "$pkg" &>/dev/null; then
-                    missing+=("$pkg")
-                else
+                if dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "^install ok installed$"; then
                     success "$pkg already installed"
+                else
+                    missing+=("$pkg")
                 fi
             done
             if [[ ${#missing[@]} -gt 0 ]]; then
@@ -152,11 +170,23 @@ install_packages() {
                 sudo apt-get update
                 sudo apt-get install -y "${missing[@]}"
             fi
+            # gh (GitHub CLI) needs special repo on Debian/Ubuntu
+            if ! command -v gh &>/dev/null; then
+                info "Installing gh (GitHub CLI)..."
+                curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+                echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+                sudo apt-get update
+                sudo apt-get install -y gh
+            else
+                success "gh already installed"
+            fi
             # Install neovim from GitHub releases for latest version
             install_neovim_from_release
+            # Install duckdb from GitHub releases
+            install_duckdb_from_release
             ;;
         fedora)
-            local dnf_packages=("git" "tmux" "neovim")
+            local dnf_packages=("git" "vim" "tmux" "neovim" "curl" "wget" "ripgrep" "fd-find" "fzf" "gh" "w3m" "bat" "unzip")
             local missing=()
             for pkg in "${dnf_packages[@]}"; do
                 if ! rpm -q "$pkg" &>/dev/null; then
@@ -169,9 +199,11 @@ install_packages() {
                 info "Installing: ${missing[*]}"
                 sudo dnf install -y "${missing[@]}"
             fi
+            # Install duckdb from GitHub releases
+            install_duckdb_from_release
             ;;
         arch)
-            local pacman_packages=("git" "tmux" "neovim")
+            local pacman_packages=("git" "vim" "tmux" "neovim" "curl" "wget" "ripgrep" "fd" "fzf" "github-cli" "w3m" "bat" "unzip")
             local missing=()
             for pkg in "${pacman_packages[@]}"; do
                 if ! pacman -Q "$pkg" &>/dev/null; then
@@ -184,9 +216,11 @@ install_packages() {
                 info "Installing: ${missing[*]}"
                 sudo pacman -S --noconfirm "${missing[@]}"
             fi
+            # Install duckdb from GitHub releases
+            install_duckdb_from_release
             ;;
         alpine)
-            local apk_packages=("git" "tmux" "neovim")
+            local apk_packages=("git" "vim" "tmux" "neovim" "curl" "wget" "ripgrep" "fd" "fzf" "github-cli" "w3m" "bat" "unzip")
             local missing=()
             for pkg in "${apk_packages[@]}"; do
                 if ! apk info -e "$pkg" &>/dev/null; then
@@ -199,9 +233,11 @@ install_packages() {
                 info "Installing: ${missing[*]}"
                 sudo apk add "${missing[@]}"
             fi
+            # Install duckdb from GitHub releases
+            install_duckdb_from_release
             ;;
         *)
-            warn "Unknown OS. Please install git, tmux, and neovim manually."
+            warn "Unknown OS. Please install packages manually: git, vim, tmux, neovim, curl, wget, ripgrep, fd, fzf, gh, w3m, bat, duckdb"
             ;;
     esac
 }
@@ -264,12 +300,8 @@ main() {
     echo -e "${BLUE}========================================${NC}"
     echo ""
 
-    # Skip packages in containers (setup.sh handles them) or if --skip-packages
     if [[ "$SKIP_PACKAGES" == true ]]; then
         info "Skipping package installation (--skip-packages)"
-    elif is_container; then
-        info "Container detected - skipping package installation"
-        info "(packages should be installed via devcontainer setup.sh)"
     else
         install_packages
     fi
