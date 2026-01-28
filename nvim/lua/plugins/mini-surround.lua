@@ -1,6 +1,6 @@
 -- Configure mini.surround to use vim-surround keybindings
 return {
-  "echasnovski/mini.surround",
+  "nvim-mini/mini.surround",
   event = "VeryLazy",
   opts = {
     mappings = {
