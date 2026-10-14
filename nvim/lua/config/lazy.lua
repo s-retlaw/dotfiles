@@ -17,17 +17,12 @@ if not (vim.uv or vim.loop).fs_stat(lazypath) then
 end
 vim.opt.rtp:prepend(lazypath)
 
--- Load options and keymaps before lazy
-require("config.options")
-require("config.keymaps")
-
 -- Setup lazy.nvim with LazyVim
 require("lazy").setup({
   spec = {
     -- Import LazyVim and its plugins
     { "LazyVim/LazyVim", import = "lazyvim.plugins" },
-    -- Import LazyVim extras (must come before custom plugins)
-    { import = "lazyvim.plugins.extras.coding.mini-surround" },
+    -- Language/coding extras are loaded from lazyvim.json.
     -- Import local plugins from lua/plugins/
     { import = "plugins" },
   },

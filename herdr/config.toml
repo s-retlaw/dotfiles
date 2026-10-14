@@ -1,0 +1,16 @@
+onboarding = false
+
+[keys]
+prefix = "ctrl+a"
+navigate_workspace_down = ["j", "down"]
+navigate_workspace_up = ["k", "up"]
+
+[theme]
+name = "catppuccin"
+auto_switch = false
+
+[ui]
+status_indicators = "symbols"
+
+[ui.toast]
+delivery = "herdr"
