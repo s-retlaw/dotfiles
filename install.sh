@@ -401,8 +401,13 @@ install_dotfiles() {
     else
         backup_and_install "$DOTFILES_DIR/nvim" "$CONFIG_HOME/nvim"
     fi
-    # Only manage the config file, never herdr's sockets, logs, or session data.
-    backup_and_install "$DOTFILES_DIR/herdr/config.toml" "$CONFIG_HOME/herdr/config.toml"
+    # Omarchy owns its Herdr defaults; only deploy our baseline elsewhere.
+    # Only manage the config file, never sockets, logs, or session data.
+    if [[ "$OMARCHY_MODE" == true ]]; then
+        info "Keeping Omarchy's existing Herdr configuration"
+    else
+        backup_and_install "$DOTFILES_DIR/herdr/config.toml" "$CONFIG_HOME/herdr/config.toml"
+    fi
     install_shell
 }
 

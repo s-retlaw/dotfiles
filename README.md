@@ -69,7 +69,7 @@ Neovim configuration with the repo's standalone setup.
 | --- | --- |
 | `.bashrc` | Shell helper snippet at `~/.config/dotfiles/bashrc`, sourced once from your existing `~/.bashrc`. |
 | `tmux/tmux.conf` | `~/.tmux.conf`. |
-| `herdr/config.toml` | `~/.config/herdr/config.toml`; session data, sockets, and logs are left in place. |
+| `herdr/config.toml` | `~/.config/herdr/config.toml` on non-Omarchy installs; Omarchy mode leaves it untouched. Session data, sockets, and logs are left in place. |
 | `nvim/` | `~/.config/nvim` on standalone machines; selected overrides on Omarchy. |
 
 The snippet supplies `resize` / `rs`, container detection, PATH setup, and
@@ -77,8 +77,20 @@ Debian command aliases. It is not a replacement for your complete `.bashrc`.
 The resize helper queries the current pane's terminal, times out after two
 seconds, and restores terminal settings on exit.
 
-Herdr preferences mirror the current workstation: `Ctrl-a` prefix, Catppuccin,
-`j`/`k` workspace navigation in navigate mode, and in-app toast delivery.
+Herdr uses the Omarchy baseline imported from Walter's Omarchy desktop on
+October 15, 2026: `Ctrl+Space` prefix, terminal colors, `Alt+Up/Down` workspace
+switching, and `Alt+Left/Right` tab switching. Close confirmations and pane
+scrollbars are disabled, matching that baseline. `Alt+j/k` remain available to
+LazyVim rather than being captured by Herdr.
+
+In Omarchy mode, the installer neither creates nor replaces Herdr's config.
+Keep Omarchy's own defaults there. On other computers, this repository is the
+source of truth. Compare newer Omarchy configs against `herdr/config.toml`,
+review changes, and update this copy manually as Omarchy develops. Copy-mode
+installs need redeployment after changes; symlink installs see repo edits.
+Keep a backup before deploying and verify settings against the installed
+Herdr version. A new default can be imported with LocalSend; do not automatically
+synchronize over Omarchy's config.
 See the [herdr configuration docs](https://herdr.dev/docs/configuration/).
 The installer does not restart or reload a running herdr session. To apply
 settings yourself, use `herdr server reload-config` or the in-app reload action.

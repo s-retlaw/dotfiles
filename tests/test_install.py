@@ -45,6 +45,7 @@ class InstallTests(unittest.TestCase):
         self.assertEqual((nvim / "init.lua").read_bytes(), (REPO / "nvim/init.lua").read_bytes())
         self.assertIn("KEEP_ME=yes", self.rc.read_text())
         self.assertEqual((herdr / "session.json").read_text(), "runtime state")
+        self.assertEqual((herdr / "config.toml").read_bytes(), (REPO / "herdr/config.toml").read_bytes())
         self.assertTrue(list((self.home / ".dotfiles_backup").glob("*/item.*/nvim/original")))
         for target in (self.home / ".dotfiles_backup").glob("*/item.*/target.txt"):
             self.assertTrue(Path(target.read_text().strip()).is_absolute())
@@ -62,10 +63,17 @@ class InstallTests(unittest.TestCase):
 
     def test_omarchy_preserves_base_and_merges_extras(self):
         nvim = self.make_omarchy()
+        herdr = self.config / "herdr"
+        herdr.mkdir()
+        herdr_config = herdr / "config.toml"
+        herdr_config.write_text('# Omarchy-owned config\n[keys]\nprefix = "ctrl+space"\n')
+        original_herdr = herdr_config.read_bytes()
         originals = {p: p.read_bytes() for p in nvim.rglob("*.lua")}
         self.env["OMARCHY_PATH"] = str(self.home / "omarchy")
-        for args in ((), (), ("--copy",), ("--copy",)):
+        for args in ((), ("--omarchy",), ("--copy",), ("--omarchy", "--copy")):
             self.install(*args)
+            self.assertEqual(herdr_config.read_bytes(), original_herdr)
+            self.assertFalse(herdr_config.is_symlink())
             for p, data in originals.items():
                 self.assertEqual(p.read_bytes(), data)
             settings = json.loads((nvim / "lazyvim.json").read_text())
