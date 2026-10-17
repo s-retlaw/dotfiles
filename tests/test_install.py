@@ -140,6 +140,88 @@ done
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue((self.home / ".local/bin/duckdb").exists())
 
+    def test_omarchy_package_routing_and_arch_fallback(self):
+        script = r'''source "$1" --standalone
+OS=arch
+[[ "$OMARCHY_SYSTEM" == true && "$OMARCHY_MODE" == false ]]
+scenario=$2
+if [[ "$scenario" == arch ]]; then OMARCHY_SYSTEM=false; fi
+command() {
+    case "$*" in
+        '-v omarchy-pkg-add') [[ "$scenario" != no-helper ]]; return ;;
+        '-v nvim') [[ "$scenario" == existing ]]; return ;;
+        '-v herdr') return 1 ;;
+    esac
+    builtin command "$@"
+}
+pacman() {
+    printf 'pacman %s\n' "$*" >> "$HOME/packages"
+    case "$1" in
+        -Si) [[ "$scenario" != legacy ]]; return ;;
+        -Q) [[ "$2" != tmux ]]; return ;;
+        *) return 99 ;;
+    esac
+}
+as_root() { printf 'root %s\n' "$*" >> "$HOME/packages"; }
+omarchy-pkg-add() {
+    printf 'omarchy %s\n' "$*" >> "$HOME/packages"
+    [[ "$scenario" != failure ]]
+}
+install_duckdb_from_release() { printf 'duckdb-release\n' >> "$HOME/packages"; }
+curl() { printf 'unexpected download\n' >&2; return 99; }
+install_packages
+if [[ "$OMARCHY_SYSTEM" == true ]]; then install_herdr; fi
+'''
+        self.env["OMARCHY_PATH"] = str(self.home / "omarchy")
+        for scenario in ("existing", "missing", "legacy", "arch", "failure", "no-helper"):
+            with self.subTest(scenario=scenario):
+                log = self.home / "packages"
+                log.write_text("")
+                result = subprocess.run(
+                    ["bash", "-c", script, "test", str(REPO / "install.sh"), scenario],
+                    env=self.env, capture_output=True, text=True)
+                self.assertEqual(result.returncode == 0, scenario not in ("failure", "no-helper"),
+                                 result.stdout + result.stderr)
+                calls = log.read_text().splitlines()
+                if scenario == "no-helper":
+                    self.assertEqual(calls, [])
+                    self.assertIn("requires omarchy-pkg-add", result.stderr)
+                elif scenario == "arch":
+                    self.assertIn("root pacman -S --needed --noconfirm tmux", calls)
+                    self.assertIn("duckdb-release", calls)
+                    self.assertFalse(any(c.startswith("omarchy ") for c in calls))
+                else:
+                    installs = [c.split()[1:] for c in calls if c.startswith("omarchy ")]
+                    self.assertIn("tmux", installs[0])
+                    self.assertIn("duckdb", installs[0])
+                    self.assertNotIn("duckdb-release", calls)
+                    self.assertFalse(any(c.startswith("root ") for c in calls))
+                    if scenario == "existing":
+                        self.assertNotIn("nvim", installs[0])
+                        self.assertNotIn("neovim", installs[0])
+                    elif scenario == "legacy":
+                        self.assertIn("neovim", installs[0])
+                    elif scenario == "missing":
+                        self.assertIn("nvim", installs[0])
+                        self.assertNotIn("neovim", installs[0])
+                    if scenario == "failure":
+                        self.assertEqual(len(installs), 1)
+                    else:
+                        self.assertEqual(installs[1], ["herdr"])
+
+    def test_skip_packages_bypasses_omarchy_helper(self):
+        self.make_omarchy()
+        self.env["OMARCHY_PATH"] = str(self.home / "omarchy")
+        script = r'''source "$1" --skip-packages
+omarchy-pkg-add() { return 99; }
+curl() { return 99; }
+main
+'''
+        result = subprocess.run(["bash", "-c", script, "test", str(REPO / "install.sh")],
+                                env=self.env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Skipping package installation", result.stdout)
+
     def test_architecture_versions_and_root_without_sudo(self):
         script = '''source "$1" --skip-packages --standalone
 version_gte 0.11.6 0.11.2

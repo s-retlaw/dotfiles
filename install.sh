@@ -98,11 +98,13 @@ is_container() {
     [[ -f /.dockerenv ]] || [[ -f /run/.containerenv ]] || grep -q 'docker\|lxc\|containerd' /proc/1/cgroup 2>/dev/null
 }
 
+# Package routing follows the host even when --standalone selects our Neovim config.
+OMARCHY_SYSTEM=false
+if [[ "$OMARCHY_MODE" == true ]] || [[ -n "${OMARCHY_PATH:-}" ]] || [[ -d /usr/share/omarchy ]] || [[ -d "$HOME/.local/share/omarchy" ]] || command -v omarchy &>/dev/null || command -v omarchy-pkg-add &>/dev/null; then
+    OMARCHY_SYSTEM=true
+fi
 if [[ "$OMARCHY_MODE" == auto ]]; then
-    OMARCHY_MODE=false
-    if [[ -n "${OMARCHY_PATH:-}" ]] || [[ -d /usr/share/omarchy ]] || [[ -d "$HOME/.local/share/omarchy" ]] || command -v omarchy &>/dev/null; then
-        OMARCHY_MODE=true
-    fi
+    OMARCHY_MODE=$OMARCHY_SYSTEM
 fi
 
 OS=$(detect_os)
@@ -188,6 +190,11 @@ install_herdr() {
         success "herdr already installed"
         return
     fi
+    if [[ "$OS" == arch && "$OMARCHY_SYSTEM" == true ]]; then
+        info "Installing herdr through Omarchy..."
+        omarchy-pkg-add herdr
+        return
+    fi
     if [[ "$OS" == alpine ]]; then
         warn "Install herdr separately on Alpine; its release installer targets glibc Linux/macOS."
         return
@@ -268,6 +275,30 @@ install_packages() {
             ;;
         arch)
             local pacman_packages=("base-devel" "git" "vim" "tmux" "neovim" "curl" "wget" "ripgrep" "fd" "fzf" "github-cli" "w3m" "bat" "unzip" "wl-clipboard" "xclip")
+            if [[ "$OMARCHY_SYSTEM" == true ]]; then
+                if ! command -v omarchy-pkg-add &>/dev/null; then
+                    error "Omarchy package installation requires omarchy-pkg-add on PATH. Run from an Omarchy shell or use --skip-packages." >&2
+                    return 1
+                fi
+                # Current Omarchy ships nvim; older versions used neovim.
+                # Reuse the installed editor rather than replacing its package.
+                local omarchy_packages=()
+                for pkg in "${pacman_packages[@]}"; do
+                    [[ "$pkg" == neovim ]] || omarchy_packages+=("$pkg")
+                done
+                if ! command -v nvim &>/dev/null; then
+                    if pacman -Si nvim &>/dev/null; then
+                        omarchy_packages+=("nvim")
+                    else
+                        omarchy_packages+=("neovim")
+                    fi
+                fi
+                omarchy_packages+=("duckdb")
+                info "Installing dependencies through Omarchy..."
+                # The helper checks installed packages and handles sudo itself.
+                omarchy-pkg-add "${omarchy_packages[@]}"
+                return
+            fi
             local missing=()
             for pkg in "${pacman_packages[@]}"; do
                 if ! pacman -Q "$pkg" &>/dev/null; then

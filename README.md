@@ -58,6 +58,15 @@ exist. Your shared preferences override corresponding editor defaults; other
 Omarchy settings remain in effect. The standalone TokyoNight theme is not
 installed in this mode. Launch the editor normally with `nvim`.
 
+On Omarchy hosts, dependencies (including DuckDB and missing Herdr) are installed
+with `omarchy-pkg-add`, the helper behind `omarchy pkg add`. Packages remain
+managed by Omarchy's configured repositories; upstream release installers are
+not used. An existing Neovim is reused. If missing, the installer selects `nvim`
+when available in the repositories, otherwise the older `neovim` package name.
+The helper must be on PATH; use an Omarchy shell or `--skip-packages` if it is
+unavailable. `--standalone` changes the configuration choice but still uses
+Omarchy's package helper on a detected Omarchy host. Other Arch hosts use pacman.
+
 These overrides use [LazyVim's plugin customization mechanism](https://www.lazyvim.org/configuration/plugins)
 and follow [Omarchy's guidance to customize user configs](https://omarchy.org/manual/dotfiles/).
 Do not run `--standalone` on Omarchy unless you intend to replace its entire
@@ -139,7 +148,8 @@ python3 tests/check_tmux.py
 HERDR_CONFIG_PATH="$PWD/herdr/config.toml" herdr config check
 ```
 
-Installer tests use temporary homes and skip package installation. The optional
+Installer tests use temporary homes; package routing checks use mocked commands
+without installing packages or downloading releases. The optional
 Neovim integration check uses already-installed plugins with isolated configs,
 state, cache, and lockfiles; it checks standalone and Omarchy-style loading.
 It does not download plugins. These checks do not replace testing on an actual
